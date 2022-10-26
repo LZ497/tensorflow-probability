@@ -14,6 +14,10 @@
 # ============================================================================
 """The Laplace distribution class."""
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 # Dependency imports
 import numpy as np
 import tensorflow.compat.v2 as tf
@@ -30,7 +34,7 @@ from tensorflow_probability.python.internal import reparameterization
 from tensorflow_probability.python.internal import samplers
 from tensorflow_probability.python.internal import special_math
 from tensorflow_probability.python.internal import tensor_util
-from tensorflow_probability.python.stats import quantiles
+from tensorflow_probability.python.distributions import normal
 
 
 __all__ = [
@@ -38,7 +42,7 @@ __all__ = [
 ]
 
 
-class Laplace(distribution.AutoCompositeTensorDistribution):
+class Laplace(distribution.Distribution):
   """The Laplace distribution with location `loc` and `scale` parameters.
 
   #### Mathematical details
@@ -131,6 +135,15 @@ class Laplace(distribution.AutoCompositeTensorDistribution):
     """Distribution parameter for scale."""
     return self._scale
 
+  def _batch_shape_tensor(self, loc=None, scale=None):
+    return ps.broadcast_shape(
+        ps.shape(self.loc if loc is None else loc),
+        ps.shape(self.scale if scale is None else scale))
+
+  def _batch_shape(self):
+    return tf.broadcast_static_shape(
+        self.loc.shape, self.scale.shape)
+
   def _event_shape_tensor(self):
     return tf.constant([], dtype=tf.int32)
 
@@ -208,12 +221,6 @@ class Laplace(distribution.AutoCompositeTensorDistribution):
   def _default_event_space_bijector(self):
     return identity_bijector.Identity(validate_args=self.validate_args)
 
-  @classmethod
-  def _maximum_likelihood_parameters(cls, value):
-    median = quantiles.percentile(value, 50., axis=0, interpolation='linear')
-    return {'loc': median,
-            'scale': tf.reduce_mean(tf.abs(value - median), axis=0)}
-
   def _parameter_control_dependencies(self, is_init):
     if not self.validate_args:
       return []
@@ -247,3 +254,22 @@ def _kl_laplace_laplace(a, b, name=None):
     return (-delta_log_scale +
             distance / b_scale - 1. +
             tf.exp(-distance / a_scale + delta_log_scale))
+
+
+
+import math
+@kullback_leibler.RegisterKL(Laplace,normal.Normal)
+def _kl_laplace_normal(a, b, name=None):
+  """Calculate the batched KL divergence KL(a || b) with a Laplace and b normal.
+    Args:
+    a: instance of a Laplace distribution object.
+    b: instance of a normal distribution object.
+    name: Python `str` name to use for created operations.
+      Default value: `None` (i.e., `'kl_laplace_normal'`).
+    Returns:
+    kl_div: Batchwise KL(a || b)
+  """
+  with tf.name_scope(name or 'kl_laplace_normal'):
+    a_scale = tf.convert_to_tensor(a.scale)
+    b_scale = tf.convert_to_tensor(b.scale)
+    return (-1-tf.math.log(2*a_scale)+ ((((a.loc-b.loc)**2)+(2*a_scale**2))/ (2*(b_scale**2))) + tf.math.log(tf.math.sqrt(2*math.pi)* b_scale))

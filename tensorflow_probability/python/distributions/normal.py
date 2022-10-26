@@ -14,6 +14,10 @@
 # ============================================================================
 """The Normal (Gaussian) distribution class."""
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 # Dependency imports
 import numpy as np
 
@@ -38,7 +42,7 @@ __all__ = [
 ]
 
 
-class Normal(distribution.AutoCompositeTensorDistribution):
+class Normal(distribution.Distribution):
   """The Normal distribution with location `loc` and `scale` parameters.
 
   #### Mathematical details
@@ -165,6 +169,14 @@ class Normal(distribution.AutoCompositeTensorDistribution):
     """Distribution parameter for standard deviation."""
     return self._scale
 
+  def _batch_shape_tensor(self, loc=None, scale=None):
+    return ps.broadcast_shape(
+        ps.shape(self.loc if loc is None else loc),
+        ps.shape(self.scale if scale is None else scale))
+
+  def _batch_shape(self):
+    return tf.broadcast_static_shape(self.loc.shape, self.scale.shape)
+
   def _event_shape_tensor(self):
     return tf.constant([], dtype=tf.int32)
 
@@ -225,11 +237,6 @@ class Normal(distribution.AutoCompositeTensorDistribution):
   def _default_event_space_bijector(self):
     return identity_bijector.Identity(validate_args=self.validate_args)
 
-  @classmethod
-  def _maximum_likelihood_parameters(cls, value):
-    return {'loc': tf.reduce_mean(value, axis=0),
-            'scale': tf.math.reduce_std(value, axis=0)}
-
   def _parameter_control_dependencies(self, is_init):
     assertions = []
 
@@ -275,3 +282,27 @@ def _kl_normal_normal(a, b, name=None):
         0.5 * tf.math.squared_difference(a.loc / b_scale, b.loc / b_scale) +
         0.5 * tf.math.expm1(2. * diff_log_scale) -
         diff_log_scale)
+
+
+from tensorflow_probability.python.distributions import laplace
+from tensorflow_probability.python.distributions import normal
+import math
+
+@kullback_leibler.RegisterKL(Normal, laplace.Laplace)
+def _kl_normal_laplace(a, b, name=None):
+  """Calculate the batched KL divergence KL(a || b) with a Normal and b Laplace.
+  Args:
+    a: instance of a Normal distribution object.
+    b: instance of a Laplace distribution object.
+    name: Name to use for created operations.
+      Default value: `None` (i.e., `'kl_normal_laplace'`).
+
+  Returns:
+    kl_div: Batchwise KL(a || b)
+  """
+  with tf.name_scope(name or 'kl_normal_laplace'):
+    diff_loc = tf.math.abs(a.loc-b.loc)
+    dist = Normal(loc=0., scale=a.scale)
+    cdf_a = dist.cdf(diff_loc)- dist.cdf(-diff_loc)
+    return (-0.5*(tf.math.log(2*tf.constant(math.pi)*(a.scale**2))+1) + tf.math.log(2*b.scale)+(diff_loc/b.scale)* cdf_a + \
+      (2*a.scale)*(tf.math.exp(-((a.loc-b.loc)**2)/(2*(a.scale**2))))/(b.scale*((2* tf.constant(math.pi))**0.5)))
