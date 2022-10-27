@@ -286,7 +286,6 @@ def _kl_normal_normal(a, b, name=None):
 
 from tensorflow_probability.python.distributions import laplace
 from tensorflow_probability.python.distributions import normal
-import math
 
 @kullback_leibler.RegisterKL(Normal, laplace.Laplace)
 def _kl_normal_laplace(a, b, name=None):
@@ -301,8 +300,10 @@ def _kl_normal_laplace(a, b, name=None):
     kl_div: Batchwise KL(a || b)
   """
   with tf.name_scope(name or 'kl_normal_laplace'):
+    pi_2 = tf.cast(1, tf.float32)
+    pi = tf.math.asin(pi_2)*2
     diff_loc = tf.math.abs(a.loc-b.loc)
     dist = Normal(loc=0., scale=a.scale)
     cdf_a = dist.cdf(diff_loc)- dist.cdf(-diff_loc)
-    return (-0.5*(tf.math.log(2*tf.constant(math.pi)*(a.scale**2))+1) + tf.math.log(2*b.scale)+(diff_loc/b.scale)* cdf_a + \
-      (2*a.scale)*(tf.math.exp(-((a.loc-b.loc)**2)/(2*(a.scale**2))))/(b.scale*((2* tf.constant(math.pi))**0.5)))
+    return (-0.5*(tf.math.log(2*tf.constant(pi)*(a.scale**2))+1) + tf.math.log(2*b.scale)+(diff_loc/b.scale)* cdf_a + \
+      (2*a.scale)*(tf.math.exp(-((a.loc-b.loc)**2)/(2*(a.scale**2))))/(b.scale*((2* tf.constant(pi))**0.5)))
