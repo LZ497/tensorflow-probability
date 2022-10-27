@@ -257,7 +257,6 @@ def _kl_laplace_laplace(a, b, name=None):
 
 
 
-import math
 @kullback_leibler.RegisterKL(Laplace,normal.Normal)
 def _kl_laplace_normal(a, b, name=None):
   """Calculate the batched KL divergence KL(a || b) with a Laplace and b normal.
@@ -270,6 +269,8 @@ def _kl_laplace_normal(a, b, name=None):
     kl_div: Batchwise KL(a || b)
   """
   with tf.name_scope(name or 'kl_laplace_normal'):
+    pi_2 = tf.cast(1, tf.float32)
+    pi = tf.math.asin(pi_2)*2
     a_scale = tf.convert_to_tensor(a.scale)
     b_scale = tf.convert_to_tensor(b.scale)
-    return (-1-tf.math.log(2*a_scale)+ ((((a.loc-b.loc)**2)+(2*a_scale**2))/ (2*(b_scale**2))) + tf.math.log(tf.math.sqrt(2*math.pi)* b_scale))
+    return (-1-tf.math.log(2*a_scale)+ ((((a.loc-b.loc)**2)+(2*a_scale**2))/ (2*(b_scale**2))) + tf.math.log(tf.math.sqrt(2*pi)* b_scale))
